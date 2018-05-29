@@ -4,17 +4,39 @@ from flask import  Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_session import Session
 from flask_wtf import CSRFProtect
+from redis import StrictRedis
 import logging
+from flask_wtf import csrf
 
 db = SQLAlchemy()
 
+session_redis = None
 
 def con(conf):
     Longing(conf)
     app = Flask(__name__)
     app.config.from_object(deta_config[conf])
+    # 创建redis连接对象
+    global session_redis
+    session_redis = StrictRedis(host=deta_config[conf].REDIS_HOST, port=deta_config[conf].REDIS_PORT,decode_responses=True)
+    from .modules.index import blu
+    app.register_blueprint(blu)
+    from .modules.passport import passport_blue
+    app.register_blueprint(passport_blue)
+    from .modules.news import news_blue
+    app.register_blueprint(news_blue)
+    from info.utils.comment import do_rank
+    app.add_template_filter(do_rank,'rank')
     Session(app)
     CSRFProtect(app)
+    @app.after_request
+    def after(respose):
+        # 生成csrf随机值
+        csrf_token = csrf.generate_csrf()
+        # 将csrf_toke写入cookie
+        respose.set_cookie('csrf_token',csrf_token)
+        return respose
+
     db.init_app(app)
     return app
 
